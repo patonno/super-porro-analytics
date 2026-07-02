@@ -12,6 +12,21 @@ let cachedData: any = null;
 let lastCacheTime = 0;
 const CACHE_TTL_MS = 30000; // 30 seconds cache
 
+// Helper function to fetch with a timeout using AbortController
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 5000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    return response;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 export const app = express();
 
 // --- Middleware ---
@@ -35,16 +50,16 @@ app.get("/api/league-data", async (req, res) => {
 
     // Fetch in parallel to optimize load speed
     const [porrasRes, rrRes, pagosRes, polyRes] = await Promise.all([
-      fetch(`${SB_URL}/rest/v1/porras?select=*`, {
+      fetchWithTimeout(`${SB_URL}/rest/v1/porras?select=*`, {
         headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
-      }),
-      fetch(`${SB_URL}/rest/v1/resultados_reales?select=*&id=eq.1`, {
+      }, 4000),
+      fetchWithTimeout(`${SB_URL}/rest/v1/resultados_reales?select=*&id=eq.1`, {
         headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
-      }),
-      fetch(`${SB_URL}/rest/v1/pagos?select=nombre,pagado`, {
+      }, 4000),
+      fetchWithTimeout(`${SB_URL}/rest/v1/pagos?select=nombre,pagado`, {
         headers: { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}` }
-      }).catch(() => null),
-      fetch("https://gamma-api.polymarket.com/events?closed=false&limit=1000")
+      }, 4000).catch(() => null),
+      fetchWithTimeout("https://gamma-api.polymarket.com/events?closed=false&limit=1000", {}, 4000)
         .catch(() => null)
     ]);
 
@@ -85,13 +100,13 @@ app.get("/api/league-data", async (req, res) => {
     let pmMatchOdds: Record<string, { teamA: string, teamB: string, priceA: number, priceB: number }> = {};
     try {
       console.log("Fetching Polymarket World Cup page for slugs...");
-      const pmPageRes = await fetch("https://polymarket.com/sports/world-cup");
+      const pmPageRes = await fetchWithTimeout("https://polymarket.com/sports/world-cup", {}, 2000);
       const pmHtml = await pmPageRes.text();
       const slugs = Array.from(new Set(pmHtml.match(/fifwc-[a-z]{3}-[a-z]{3}-2026-[0-9]{2}-[0-9]{2}/g) || []));
       console.log(`Found ${slugs.length} match slugs`);
 
       const eventPromises = slugs.map(slug =>
-        fetch(`https://gamma-api.polymarket.com/events?slug=${slug}-more-markets`)
+        fetchWithTimeout(`https://gamma-api.polymarket.com/events?slug=${slug}-more-markets`, {}, 1500)
           .then(r => r.json())
           .catch(() => null)
       );
@@ -149,7 +164,7 @@ app.get("/api/scrape", async (req, res) => {
   try {
     const targetUrl = req.query.url as string || "https://porramediobanca.pages.dev";
     console.log(`Scraping target URL: ${targetUrl}`);
-    const response = await fetch(targetUrl);
+    const response = await fetchWithTimeout(targetUrl, {}, 5000);
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
