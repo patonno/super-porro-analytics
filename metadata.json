@@ -1,0 +1,6 @@
+{
+  "name": "Super Porro BMPS Analytics",
+  "description": "Real-time leaderboard analytics and performance tracker for the BMPS World Cup fantasy league.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

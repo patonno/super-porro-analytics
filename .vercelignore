@@ -1,0 +1,14 @@
+# Dev/test files
+scraped_html.html
+test.js
+test_poly.js
+metadata.json
+
+# Environment files (Vercel uses its own env var system)
+.env
+.env.*
+!.env.example
+
+# Editor/OS files
+.DS_Store
+*.log
