@@ -23,6 +23,7 @@ import { GD, flagUrl, KNOCKOUT_SCHEDULE } from "./data";
 import { scorePublicEntry, getEntryQualifiers } from "./utils";
 import { getPredictionMarketOdds, getToQualifyChance, setPolymarketOdds, setPolymarketMatchOdds } from "./odds";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+import { Analytics } from '@vercel/analytics/react';
 
 // Helper to parse date string like "12/06 19:00" to sortable number
 const parseScheduleToNumber = (sched: string): number => {
@@ -3209,6 +3210,7 @@ export default function App() {
           </motion.div>
         </div>
       )}
+      <Analytics />
     </div>
   );
 }
