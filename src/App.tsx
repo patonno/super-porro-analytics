@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { Entry, RealData, ParticipantScore, Groups } from "./types";
 import { GD, flagUrl, KNOCKOUT_SCHEDULE } from "./data";
-import { scorePublicEntry, getEntryQualifiers } from "./utils";
+import { scorePublicEntry, getEntryQualifiers, normalizeTeamList } from "./utils";
 import { getPredictionMarketOdds, getToQualifyChance, setPolymarketOdds, setPolymarketMatchOdds } from "./odds";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { Analytics } from '@vercel/analytics/react';
@@ -97,10 +97,7 @@ export default function App() {
   // Helper to get knockout teams for stages after R32
   const getKnockoutTeams = (entry: Entry | null, ukoKey: "r16" | "r8" | "r4" | "r2"): string[] => {
     if (!entry || !entry.knockout) return [];
-    const uObj = entry.knockout[ukoKey] || {};
-    return Array.isArray(uObj) 
-      ? uObj.filter(Boolean) 
-      : (Object.values(uObj).filter(Boolean) as string[]);
+    return normalizeTeamList(entry.knockout[ukoKey]);
   };
 
   // Helper to get dynamic R32 teams from group stage predictions
@@ -353,10 +350,10 @@ export default function App() {
     const elimList: { type: "elim"; g: string; m: [string, string]; matchId: string; dateStr: string; sortKey: number }[] = [];
     
     // Determine which elimination round is currently active
-    const r16Real = (realResults?.knockout?.r16 || []).filter(Boolean); // 32 teams in Round of 32 (16avos)
-    const r8 = (realResults?.knockout?.r8 || []).filter(Boolean);     // 16 teams in Round of 16 (octavos)
-    const r4 = (realResults?.knockout?.r4 || []).filter(Boolean);     // 8 teams in Cuartos (Quarterfinals)
-    const r2 = (realResults?.knockout?.r2 || []).filter(Boolean);     // 4 teams in Semis (Semifinals)
+    const r16Real = normalizeTeamList(realResults?.knockout?.r16); // 32 teams in Round of 32 (16avos)
+    const r8 = normalizeTeamList(realResults?.knockout?.r8);     // 16 teams in Round of 16 (octavos)
+    const r4 = normalizeTeamList(realResults?.knockout?.r4);     // 8 teams in Cuartos (Quarterfinals)
+    const r2 = normalizeTeamList(realResults?.knockout?.r2);     // 4 teams in Semis (Semifinals)
     
     if (r8.length < 16) {
       // Round of 32 (1/16) is active!
@@ -2420,22 +2417,22 @@ export default function App() {
                   let stageName = "";
 
                   if (knockoutStageTab === "r32") {
-                    realTeams = realResults?.knockout?.r16 || [];
+                    realTeams = normalizeTeamList(realResults?.knockout?.r16);
                     robTeams = getR32Teams(robertoScore.entry);
                     rivalTeams = compareUser ? getR32Teams(compareUser) : [];
                     stageName = "Round of 32 (1/16)";
                   } else if (knockoutStageTab === "r16") {
-                    realTeams = realResults?.knockout?.r8 || [];
+                    realTeams = normalizeTeamList(realResults?.knockout?.r8);
                     robTeams = getKnockoutTeams(robertoScore.entry, "r16");
                     rivalTeams = compareUser ? getKnockoutTeams(compareUser, "r16") : [];
                     stageName = "Round of 16 (1/8)";
                   } else if (knockoutStageTab === "r8") {
-                    realTeams = realResults?.knockout?.r4 || [];
+                    realTeams = normalizeTeamList(realResults?.knockout?.r4);
                     robTeams = getKnockoutTeams(robertoScore.entry, "r8");
                     rivalTeams = compareUser ? getKnockoutTeams(compareUser, "r8") : [];
                     stageName = "Quarterfinals (1/4)";
                   } else if (knockoutStageTab === "r4") {
-                    realTeams = realResults?.knockout?.r2 || [];
+                    realTeams = normalizeTeamList(realResults?.knockout?.r2);
                     robTeams = getKnockoutTeams(robertoScore.entry, "r4");
                     rivalTeams = compareUser ? getKnockoutTeams(compareUser, "r4") : [];
                     stageName = "Semifinals (1/2)";
@@ -2453,10 +2450,10 @@ export default function App() {
                     if (!realResults?.knockout) return false;
                     const ko = realResults.knockout;
 
-                    const r16Real = (ko.r16 || []).filter(Boolean); // 32 teams in Round of 32 (1/16)
-                    const r8Real = (ko.r8 || []).filter(Boolean);   // 16 teams in Round of 16 (1/8)
-                    const r4Real = (ko.r4 || []).filter(Boolean);   // 8 teams in Quarterfinals (1/4)
-                    const r2Real = (ko.r2 || []).filter(Boolean);   // 4 teams in Semifinals (1/2)
+                    const r16Real = normalizeTeamList(ko.r16); // 32 teams in Round of 32 (1/16)
+                    const r8Real = normalizeTeamList(ko.r8);   // 16 teams in Round of 16 (1/8)
+                    const r4Real = normalizeTeamList(ko.r4);   // 8 teams in Quarterfinals (1/4)
+                    const r2Real = normalizeTeamList(ko.r2);   // 4 teams in Semifinals (1/2)
 
                     // 1. Stage "r32" (Checking elimination during Round of 32)
                     if (stage === "r32") {

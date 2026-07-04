@@ -1,6 +1,23 @@
 import { Groups, Entry, Knockout, TeamStanding, ScoreBreakdown, ParticipantScore } from "./types";
 import { GD, FIFA_THIRD_PLACE_MATRIX, THIRD_PLACE_PLACEHOLDERS } from "./data";
 
+export function normalizeTeamList(value: unknown): string[] {
+  const list = Array.isArray(value)
+    ? value
+    : value && typeof value === "object"
+      ? Object.values(value as Record<string, unknown>)
+      : [];
+
+  return Array.from(
+    new Set(
+      list
+        .filter((team): team is string => typeof team === "string")
+        .map((team) => team.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
 export function calcGroupStandings(g: string, grupos: Groups): TeamStanding[] {
   const ms = GD[g] || [];
   const teams: Record<string, TeamStanding> = {};
@@ -158,7 +175,7 @@ export function scorePublicEntry(entry: Entry, realKnockout: Knockout, realGrupo
   });
 
   // Round of 32 (r16) scoring
-  const realR16 = (realKnockout.r16 || []).filter(Boolean);
+  const realR16 = normalizeTeamList(realKnockout.r16);
   if (realR16.length) {
     const quals = getEntryQualifiers(entry.grupos || {});
     const userR16: string[] = [];
@@ -176,9 +193,8 @@ export function scorePublicEntry(entry: Entry, realKnockout: Knockout, realGrupo
 
   // Knockout stage helper
   const scoreStage = (rkoKey: keyof Knockout, ukoKey: "r16" | "r8" | "r4" | "r2", p: number, bkey: keyof ScoreBreakdown) => {
-    const rList = (realKnockout[rkoKey] as string[]) || [];
-    const uObj = entry.knockout[ukoKey] || {};
-    const uArr = Array.isArray(uObj) ? uObj : Object.values(uObj);
+    const rList = normalizeTeamList(realKnockout[rkoKey]);
+    const uArr = normalizeTeamList(entry.knockout[ukoKey]);
     rList.forEach((t) => {
       if (t && uArr.includes(t)) {
         pts += p;
