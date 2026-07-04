@@ -115,7 +115,7 @@ export default function App() {
     return userR16.filter(Boolean);
   };
 
-  // Fetch all live data from server API
+  // Fetch all live data from server API (I need this to commit agane)
   const fetchData = async (forceRefresh = false) => {
     if (forceRefresh) setIsRefreshing(true);
     try {
