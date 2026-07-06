@@ -145,6 +145,30 @@ export function getEntryQualifiers(grupos: Groups): { m: string; a: string; b: s
   ];
 }
 
+export function deriveBracketRound(
+  prevMatchups: { matchId: string; teams: [string, string] }[],
+  advancedTeams: string[],
+  bracket: Record<string, number>,
+  numMatches: number
+): ([string, string])[] {
+  const slots: Record<number, string[]> = {};
+  for (const pm of prevMatchups) {
+    const slotIdx = bracket[pm.matchId];
+    if (slotIdx === undefined) continue;
+    const winner = pm.teams.find(t => advancedTeams.includes(t));
+    if (winner) {
+      if (!slots[slotIdx]) slots[slotIdx] = [];
+      slots[slotIdx].push(winner);
+    }
+  }
+  const result: ([string, string])[] = [];
+  for (let i = 0; i < numMatches; i++) {
+    const slotTeams = slots[i] || [];
+    result.push([slotTeams[0] || "TBD", slotTeams[1] || "TBD"]);
+  }
+  return result;
+}
+
 export function scorePublicEntry(entry: Entry, realKnockout: Knockout, realGrupos: Groups): { pts: number; bk: ScoreBreakdown } {
   let pts = 0;
   const bk: ScoreBreakdown = { grupos: 0, r16: 0, r8: 0, r4: 0, r2: 0, final: 0, pichi: 0 };

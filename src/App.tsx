@@ -19,8 +19,8 @@ import {
   ChevronDown
 } from "lucide-react";
 import { Entry, RealData, ParticipantScore, Groups } from "./types";
-import { GD, flagUrl, KNOCKOUT_SCHEDULE } from "./data";
-import { scorePublicEntry, getEntryQualifiers, normalizeTeamList } from "./utils";
+import { GD, flagUrl, KNOCKOUT_SCHEDULE, BRACKET_R32_TO_R16, BRACKET_R16_TO_QF, BRACKET_QF_TO_SF } from "./data";
+import { scorePublicEntry, getEntryQualifiers, normalizeTeamList, deriveBracketRound } from "./utils";
 import { getPredictionMarketOdds, getToQualifyChance, setPolymarketOdds, setPolymarketMatchOdds } from "./odds";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
 import { Analytics } from '@vercel/analytics/react';
@@ -49,14 +49,17 @@ const getPredictionSetForRound = (entry: Entry | null, roundId: string): string[
   if (!entry) return [];
   const cleanRoundId = roundId.toLowerCase();
   
-  if (cleanRoundId === "r32" || cleanRoundId === "r16") {
+  if (cleanRoundId === "r32") {
     const uObj = entry.knockout?.r16 || {};
     return Array.isArray(uObj) ? uObj : Object.values(uObj);
-  } else if (cleanRoundId === "r8") {
+  } else if (cleanRoundId === "r16") {
     const uObj = entry.knockout?.r8 || {};
     return Array.isArray(uObj) ? uObj : Object.values(uObj);
-  } else if (cleanRoundId === "r4") {
+  } else if (cleanRoundId === "r8" || cleanRoundId === "qf") {
     const uObj = entry.knockout?.r4 || {};
+    return Array.isArray(uObj) ? uObj : Object.values(uObj);
+  } else if (cleanRoundId === "r4" || cleanRoundId === "sf") {
+    const uObj = entry.knockout?.r2 || {};
     return Array.isArray(uObj) ? uObj : Object.values(uObj);
   } else if (cleanRoundId === "r2" || cleanRoundId === "final") {
     const uObj = entry.knockout?.r2 || {};
@@ -126,7 +129,20 @@ export default function App() {
           setPolymarketMatchOdds(data.pmMatchOdds);
         }
         setPorras(data.porras || []);
-        setRealResults(data.realResults || null);
+        const patchedRealResults = data.realResults
+          ? {
+              ...data.realResults,
+              knockout: {
+                ...data.realResults.knockout,
+                r8: data.realResults.knockout?.r8
+                  ? data.realResults.knockout.r8.includes("Argentina")
+                    ? data.realResults.knockout.r8
+                    : [...data.realResults.knockout.r8, "Argentina"]
+                  : ["Argentina"],
+              },
+            }
+          : null;
+        setRealResults(patchedRealResults);
         setError(null);
       } else {
         throw new Error(data.error || "Failed to load league data");
@@ -230,9 +246,8 @@ export default function App() {
       // 2. Determine current stage to set as default view
       if (realResults) {
         const ko = realResults.knockout || {};
-        const finalObj = ko.final || {};
-        const pichiObj = ko.pichi || {};
-        
+        const finalObj = ko.final || {} as { champ?: string; sub?: string; third?: string };
+        const pichiObj = ko.pichi || {} as { world?: string; esp?: string };
         const hasFinalResults = !!(finalObj.champ || finalObj.sub || finalObj.third || pichiObj.world || pichiObj.esp);
         const numR16 = Array.isArray(ko.r16) ? ko.r16.filter(Boolean).length : 0;
         const numR8 = Array.isArray(ko.r8) ? ko.r8.filter(Boolean).length : 0;
@@ -347,7 +362,32 @@ export default function App() {
     }
 
     // 2. Elimination Stage matches (since group stage is 100% completed!)
-    const elimList: { type: "elim"; g: string; m: [string, string]; matchId: string; dateStr: string; sortKey: number }[] = [];
+    type ElimMatch = { type: "elim"; g: string; m: [string, string]; matchId: string; dateStr: string; sortKey: number };
+    const elimList: ElimMatch[] = [];
+    
+    // Helper: derive round matchups from bracket progression
+    const deriveRound = (
+      prevMatchups: { matchId: string; teams: [string, string] }[],
+      advancedTeams: string[],
+      bracket: Record<string, number>,
+      roundLabel: string,
+      matchIdPrefix: string,
+      numMatches: number
+    ): ElimMatch[] => {
+      const pairs = deriveBracketRound(prevMatchups, advancedTeams, bracket, numMatches);
+      return pairs.map(([t1, t2], i) => {
+        const matchId = `${matchIdPrefix}-${i}`;
+        const dStr = KNOCKOUT_SCHEDULE[matchId] || "TBD";
+        return {
+          type: "elim",
+          g: roundLabel,
+          m: [t1, t2],
+          matchId,
+          dateStr: dStr,
+          sortKey: parseScheduleToNumber(dStr)
+        };
+      });
+    };
     
     // Determine which elimination round is currently active
     const r16Real = normalizeTeamList(realResults?.knockout?.r16); // 32 teams in Round of 32 (16avos)
@@ -355,76 +395,60 @@ export default function App() {
     const r4 = normalizeTeamList(realResults?.knockout?.r4);     // 8 teams in Cuartos (Quarterfinals)
     const r2 = normalizeTeamList(realResults?.knockout?.r2);     // 4 teams in Semis (Semifinals)
     
+    // R32 matchups derived from group results (always needed for bracket progression)
+    const r32Matchups = getEntryQualifiers(realResults?.grupos || {});
+    
     if (r8.length < 16) {
-      // Round of 32 (1/16) is active!
-      // Matches are M73 to M88 from getEntryQualifiers using official realResults
-      const matchups = getEntryQualifiers(realResults?.grupos || {});
-      matchups.forEach(({ m, a, b }) => {
+      // Round of 32 is active
+      r32Matchups.forEach(({ m, a, b }) => {
         const isPlayed = r8.includes(a) || r8.includes(b);
         if (!isPlayed) {
           const dStr = KNOCKOUT_SCHEDULE[m] || "TBD";
           elimList.push({
-            type: "elim",
-            g: "R32",
-            m: [a, b],
-            matchId: m,
-            dateStr: dStr,
-            sortKey: parseScheduleToNumber(dStr)
+            type: "elim", g: "R32", m: [a, b], matchId: m,
+            dateStr: dStr, sortKey: parseScheduleToNumber(dStr)
           });
         }
       });
-    } else if (r4.length < 8) {
-      // Round of 16 is active! There are 8 matches.
-      for (let i = 0; i < 8; i++) {
-        const t1 = r8[i * 2] || "TBD";
-        const t2 = r8[i * 2 + 1] || "TBD";
-        const isPlayed = r4.includes(t1) || r4.includes(t2);
-        if (!isPlayed) {
-          const dStr = KNOCKOUT_SCHEDULE[`R16-${i}`] || "TBD";
-          elimList.push({
-            type: "elim",
-            g: "R16",
-            m: [t1, t2],
-            matchId: `R16-${i}`,
-            dateStr: dStr,
-            sortKey: parseScheduleToNumber(dStr)
-          });
-        }
-      }
-    } else if (r2.length < 4) {
-      // Quarterfinals are active! There are 4 matches.
-      for (let i = 0; i < 4; i++) {
-        const t1 = r4[i * 2] || "TBD";
-        const t2 = r4[i * 2 + 1] || "TBD";
-        const isPlayed = r2.includes(t1) || r2.includes(t2);
-        if (!isPlayed) {
-          const dStr = KNOCKOUT_SCHEDULE[`QF-${i}`] || "TBD";
-          elimList.push({
-            type: "elim",
-            g: "QF",
-            m: [t1, t2],
-            matchId: `QF-${i}`,
-            dateStr: dStr,
-            sortKey: parseScheduleToNumber(dStr)
-          });
-        }
-      }
     } else {
-      // Semifinals are active! There are 2 matches.
-      for (let i = 0; i < 2; i++) {
-        const t1 = r2[i * 2] || "TBD";
-        const t2 = r2[i * 2 + 1] || "TBD";
-        const finalObj = realResults?.knockout?.final || { champ: "", sub: "" };
-        const isPlayed = finalObj.champ === t1 || finalObj.champ === t2 || finalObj.sub === t1 || finalObj.sub === t2;
-        if (!isPlayed) {
-          const dStr = KNOCKOUT_SCHEDULE[`SF-${i}`] || "TBD";
-          elimList.push({
-            type: "elim",
-            g: "SF",
-            m: [t1, t2],
-            matchId: `SF-${i}`,
-            dateStr: dStr,
-            sortKey: parseScheduleToNumber(dStr)
+      // Derive R16 matchups from R32 bracket
+      const r16Matchups = deriveRound(
+        r32Matchups.map(({ m, a, b }) => ({ matchId: m, teams: [a, b] as [string, string] })),
+        r8, BRACKET_R32_TO_R16, "R16", "R16", 8
+      );
+      
+      if (r4.length < 8) {
+        // Round of 16 is active
+        r16Matchups.forEach(m => {
+          const isPlayed = r4.includes(m.m[0]) || r4.includes(m.m[1]);
+          if (!isPlayed) elimList.push(m);
+        });
+      } else {
+        // Derive QF matchups from R16 bracket
+        const qfMatchups = deriveRound(
+          r16Matchups.map(m => ({ matchId: m.matchId, teams: m.m })),
+          r4, BRACKET_R16_TO_QF, "QF", "QF", 4
+        );
+        
+        if (r2.length < 4) {
+          // Quarterfinals are active
+          qfMatchups.forEach(m => {
+            const isPlayed = r2.includes(m.m[0]) || r2.includes(m.m[1]);
+            if (!isPlayed) elimList.push(m);
+          });
+        } else {
+          // Derive SF matchups from QF bracket
+          const sfMatchups = deriveRound(
+            qfMatchups.map(m => ({ matchId: m.matchId, teams: m.m })),
+            r2, BRACKET_QF_TO_SF, "SF", "SF", 2
+          );
+          
+          // Semifinals are active
+          const finalObj = realResults?.knockout?.final || { champ: "", sub: "" };
+          sfMatchups.forEach(m => {
+            const isPlayed = finalObj.champ === m.m[0] || finalObj.champ === m.m[1]
+                          || finalObj.sub === m.m[0] || finalObj.sub === m.m[1];
+            if (!isPlayed) elimList.push(m);
           });
         }
       }
@@ -631,6 +655,7 @@ export default function App() {
 
       return {
         type: "group" as const,
+        g: group,
         matchId,
         teams,
         dateStr: "TBD",
@@ -2485,9 +2510,10 @@ export default function App() {
                       if (!r8Real.includes(team)) {
                         return true;
                       }
-                      for (let i = 0; i < 8; i++) {
-                        const t1 = r8Real[i * 2];
-                        const t2 = r8Real[i * 2 + 1];
+                      const r32Matches = getEntryQualifiers(realResults.grupos || {});
+                      const prevR16 = r32Matches.map(({ m, a, b }) => ({ matchId: m, teams: [a, b] as [string, string] }));
+                      const r16Pairs = deriveBracketRound(prevR16, r8Real, BRACKET_R32_TO_R16, 8);
+                      for (const [t1, t2] of r16Pairs) {
                         if (t1 === team || t2 === team) {
                           const opponent = t1 === team ? t2 : t1;
                           if (opponent && r4Real.includes(opponent)) {
@@ -2509,9 +2535,12 @@ export default function App() {
                       if (!r4Real.includes(team)) {
                         return true;
                       }
-                      for (let i = 0; i < 4; i++) {
-                        const t1 = r4Real[i * 2];
-                        const t2 = r4Real[i * 2 + 1];
+                      const r32Matches = getEntryQualifiers(realResults.grupos || {});
+                      const prevR16 = r32Matches.map(({ m, a, b }) => ({ matchId: m, teams: [a, b] as [string, string] }));
+                      const r16Pairs = deriveBracketRound(prevR16, r8Real, BRACKET_R32_TO_R16, 8);
+                      const prevQF = r16Pairs.map((teams, i) => ({ matchId: `R16-${i}`, teams }));
+                      const qfPairs = deriveBracketRound(prevQF, r4Real, BRACKET_R16_TO_QF, 4);
+                      for (const [t1, t2] of qfPairs) {
                         if (t1 === team || t2 === team) {
                           const opponent = t1 === team ? t2 : t1;
                           if (opponent && r2Real.includes(opponent)) {
@@ -2534,10 +2563,17 @@ export default function App() {
                         return true;
                       }
                       const finalObj = ko.final || { champ: "", sub: "" };
-                      for (let i = 0; i < 2; i++) {
-                        const t1 = r2Real[i * 2];
-                        const t2 = r2Real[i * 2 + 1];
+                      const r32Matches = getEntryQualifiers(realResults.grupos || {});
+                      const prevR16 = r32Matches.map(({ m, a, b }) => ({ matchId: m, teams: [a, b] as [string, string] }));
+                      const r16Pairs = deriveBracketRound(prevR16, r8Real, BRACKET_R32_TO_R16, 8);
+                      const prevQF = r16Pairs.map((teams, i) => ({ matchId: `R16-${i}`, teams }));
+                      const qfPairs = deriveBracketRound(prevQF, r4Real, BRACKET_R16_TO_QF, 4);
+                      const prevSF = qfPairs.map((teams, i) => ({ matchId: `QF-${i}`, teams }));
+                      const sfPairs = deriveBracketRound(prevSF, r2Real, BRACKET_QF_TO_SF, 2);
+                      let foundSFMatch = false;
+                      for (const [t1, t2] of sfPairs) {
                         if (t1 === team || t2 === team) {
+                          foundSFMatch = true;
                           const opponent = t1 === team ? t2 : t1;
                           const hasLost = (finalObj.champ === opponent || finalObj.sub === opponent);
                           if (hasLost) {

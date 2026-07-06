@@ -91,6 +91,29 @@ export const KNOCKOUT_SCHEDULE: Record<string, string> = {
   "M104": "19/07 21:00"
 };
 
+export const BRACKET_R32_TO_R16: Record<string, number> = {
+  "M73": 1, "M75": 1,
+  "M74": 0, "M77": 0,
+  "M76": 2, "M78": 2,
+  "M79": 3, "M80": 3,
+  "M81": 5, "M82": 5,
+  "M83": 4, "M84": 4,
+  "M85": 7, "M87": 7,
+  "M86": 6, "M88": 6,
+};
+
+export const BRACKET_R16_TO_QF: Record<string, number> = {
+  "R16-0": 0, "R16-1": 0,
+  "R16-2": 1, "R16-3": 1,
+  "R16-4": 2, "R16-5": 2,
+  "R16-6": 3, "R16-7": 3,
+};
+
+export const BRACKET_QF_TO_SF: Record<string, number> = {
+  "QF-0": 0, "QF-1": 0,
+  "QF-2": 1, "QF-3": 1,
+};
+
 export const THIRD_PLACE_PLACEHOLDERS: Record<string, string> = {
   A: 'Mejor 3º C/E/F/H/I',
   B: 'Mejor 3º E/F/G/I/J',
