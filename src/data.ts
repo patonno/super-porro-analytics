@@ -104,8 +104,8 @@ export const BRACKET_R32_TO_R16: Record<string, number> = {
 
 export const BRACKET_R16_TO_QF: Record<string, number> = {
   "R16-0": 0, "R16-1": 0,
-  "R16-2": 1, "R16-3": 1,
-  "R16-4": 2, "R16-5": 2,
+  "R16-4": 1, "R16-5": 1,
+  "R16-2": 2, "R16-3": 2,
   "R16-6": 3, "R16-7": 3,
 };
 
